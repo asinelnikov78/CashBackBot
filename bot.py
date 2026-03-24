@@ -416,12 +416,15 @@ class CashBackBot:
                 for card, value in info:
                     response += f"• **{card}**: {value}%\n"
                 
-                await callback_query.answer()
+                # Добавляем кнопку "Назад к категориям"
+                keyboard = InlineKeyboardMarkup([[
+                    InlineKeyboardButton("◀️ Назад к категориям", callback_data="back_to_categories")
+                ]])
                 
-                # Редактируем текущее сообщение, убирая кнопки
+                await callback_query.answer()
                 await callback_query.message.edit(
                     response,
-                    reply_markup=None  # Убираем все кнопки
+                    reply_markup=keyboard
                 )
                 print(f"✅ Отправлена информация по категории: {category_name}")
             
@@ -433,7 +436,6 @@ class CashBackBot:
                 keyboard = self.get_categories_keyboard(page=page)
                 if keyboard:
                     await callback_query.answer()
-                    # Обновляем сообщение с новыми кнопками
                     await callback_query.message.edit(
                         "💰 **Добро пожаловать в CashBackBot!**\n\n📋 **Выберите категорию:**",
                         reply_markup=keyboard
@@ -452,7 +454,6 @@ class CashBackBot:
             elif data == "close":
                 print("❌ Закрытие сообщения")
                 await callback_query.answer()
-                # Удаляем сообщение полностью
                 await callback_query.message.delete()
     
     async def stop(self):
