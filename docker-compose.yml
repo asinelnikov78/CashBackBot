@@ -11,6 +11,8 @@ services:
       - EXCEL_USER=${EXCEL_USER}
       - EXCEL_PASS=${EXCEL_PASS}
       - SESSIONS_DIR=/app/sessions
+      - API_ID=${API_ID}
+      - API_HASH=${API_HASH}
       - TZ=Europe/Moscow
       - PYTHONUNBUFFERED=1
     volumes:
