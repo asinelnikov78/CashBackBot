@@ -371,6 +371,13 @@ class CashBackBot:
             """Загрузка/обновление списка категорий"""
             print(f"📩 Получена команда /start от {message.from_user.id}")
             
+            # Удаляем сообщение с командой /start
+            try:
+                await message.delete()
+                print("   🗑️ Сообщение /start удалено")
+            except Exception as e:
+                print(f"   ⚠️ Не удалось удалить сообщение: {e}")
+            
             status_msg = await message.reply("🔄 Загрузка данных...")
             
             # Загружаем данные
