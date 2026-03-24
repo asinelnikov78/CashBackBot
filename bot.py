@@ -363,103 +363,105 @@ class CashBackBot:
             print(f"❌ Ошибка при запуске: {e}")
             raise
     
-def _register_handlers(self):
-    """Регистрация обработчиков сообщений"""
-    
-    @self.app.on_message(filters.command("start"))
-    async def start_command(client, message: Message):
-        """Загрузка/обновление списка категорий"""
-        print(f"📩 Получена команда /start от {message.from_user.id}")
+    def _register_handlers(self):
+        """Регистрация обработчиков сообщений"""
         
-        status_msg = await message.reply("🔄 Загрузка данных...")
-        
-        # Загружаем данные
-        success = await self._load_data()
-        
-        if not success:
-            await status_msg.edit("❌ Ошибка загрузки данных")
-            return
-        
-        if not self.categories:
-            await status_msg.edit("❌ Нет категорий с данными")
-            return
-        
-        keyboard = self.get_categories_keyboard(page=0)
-        await status_msg.delete()
-        
-        # Отправляем новое сообщение с кнопками
-        await message.reply(
-            "💰 **Добро пожаловать в CashBackBot!**\n\n📋 **Выберите категорию:**",
-            reply_markup=keyboard
-        )
-        print(f"✅ Отправлен список категорий ({len(self.categories)} шт)")
-    
-    @self.app.on_callback_query()
-    async def handle_callback(client, callback_query: CallbackQuery):
-        data = callback_query.data
-        
-        if data.startswith("cat_"):
-            category_name = data[4:]
-            print(f"🔍 Выбрана категория: {category_name}")
+        @self.app.on_message(filters.command("start"))
+        async def start_command(client, message: Message):
+            """Загрузка/обновление списка категорий"""
+            print(f"📩 Получена команда /start от {message.from_user.id}")
             
-            # Получаем информацию по категории
-            info = self.get_category_info(category_name)
+            status_msg = await message.reply("🔄 Загрузка данных...")
             
-            if not info:
-                await callback_query.answer("Нет данных по категории", show_alert=True)
+            # Загружаем данные
+            success = await self._load_data()
+            
+            if not success:
+                await status_msg.edit("❌ Ошибка загрузки данных")
                 return
             
-            emoji = self._get_category_emoji(category_name)
-            response = f"{emoji} **{category_name}**\n\n"
-            response += "**💰 Кэшбэк по картам:**\n\n"
+            if not self.categories:
+                await status_msg.edit("❌ Нет категорий с данными")
+                return
             
-            for card, value in info:
-                response += f"• **{card}**: {value}%\n"
+            keyboard = self.get_categories_keyboard(page=0)
+            await status_msg.delete()
             
-            await callback_query.answer()
-            
-            # Редактируем текущее сообщение, убирая кнопки
-            await callback_query.message.edit(
-                response,
-                reply_markup=None  # Убираем все кнопки
+            # Отправляем новое сообщение с кнопками
+            await message.reply(
+                "💰 **Добро пожаловать в CashBackBot!**\n\n📋 **Выберите категорию:**",
+                reply_markup=keyboard
             )
-            print(f"✅ Отправлена информация по категории: {category_name}")
+            print(f"✅ Отправлен список категорий ({len(self.categories)} шт)")
         
-        elif data.startswith("page_"):
-            page = int(data[5:])
-            self.current_page = page
-            print(f"📄 Переход на страницу {page + 1}")
+        @self.app.on_callback_query()
+        async def handle_callback(client, callback_query: CallbackQuery):
+            data = callback_query.data
             
-            keyboard = self.get_categories_keyboard(page=page)
-            if keyboard:
+            if data.startswith("cat_"):
+                category_name = data[4:]
+                print(f"🔍 Выбрана категория: {category_name}")
+                
+                # Получаем информацию по категории
+                info = self.get_category_info(category_name)
+                
+                if not info:
+                    await callback_query.answer("Нет данных по категории", show_alert=True)
+                    return
+                
+                emoji = self._get_category_emoji(category_name)
+                response = f"{emoji} **{category_name}**\n\n"
+                response += "**💰 Кэшбэк по картам:**\n\n"
+                
+                for card, value in info:
+                    response += f"• **{card}**: {value}%\n"
+                
                 await callback_query.answer()
-                # Обновляем сообщение с новыми кнопками (без /start)
+                
+                # Редактируем текущее сообщение, убирая кнопки
                 await callback_query.message.edit(
-                    "💰 **Добро пожаловать в CashBackBot!**\n\n📋 **Выберите категорию:**",
-                    reply_markup=keyboard
+                    response,
+                    reply_markup=None  # Убираем все кнопки
                 )
-        
-        elif data == "back_to_categories":
-            print("🔙 Возврат к списку категорий")
-            keyboard = self.get_categories_keyboard(page=self.current_page)
-            if keyboard:
+                print(f"✅ Отправлена информация по категории: {category_name}")
+            
+            elif data.startswith("page_"):
+                page = int(data[5:])
+                self.current_page = page
+                print(f"📄 Переход на страницу {page + 1}")
+                
+                keyboard = self.get_categories_keyboard(page=page)
+                if keyboard:
+                    await callback_query.answer()
+                    # Обновляем сообщение с новыми кнопками
+                    await callback_query.message.edit(
+                        "💰 **Добро пожаловать в CashBackBot!**\n\n📋 **Выберите категорию:**",
+                        reply_markup=keyboard
+                    )
+            
+            elif data == "back_to_categories":
+                print("🔙 Возврат к списку категорий")
+                keyboard = self.get_categories_keyboard(page=self.current_page)
+                if keyboard:
+                    await callback_query.answer()
+                    await callback_query.message.edit(
+                        "💰 **Добро пожаловать в CashBackBot!**\n\n📋 **Выберите категорию:**",
+                        reply_markup=keyboard
+                    )
+            
+            elif data == "close":
+                print("❌ Закрытие сообщения")
                 await callback_query.answer()
-                await callback_query.message.edit(
-                    "💰 **Добро пожаловать в CashBackBot!**\n\n📋 **Выберите категорию:**",
-                    reply_markup=keyboard
-                )
-        
-        elif data == "close":
-            print("❌ Закрытие сообщения")
-            await callback_query.answer()
-            # Удаляем сообщение полностью
-            await callback_query.message.delete()    
+                # Удаляем сообщение полностью
+                await callback_query.message.delete()
+    
     async def stop(self):
         """Остановка бота"""
         if hasattr(self, 'app') and self.app:
             print("\n🛑 Останавливаем CashBackBot...")
             await self.app.stop()
             print("✅ CashBackBot остановлен")
+
 
 async def main():
     """Основная функция"""
