@@ -1,0 +1,9 @@
+# Telegram Bot Token
+token = YOUR_BOT_TOKEN_HERE
+
+# Excel file URL
+file_url = http://example.com/cashback.xlsx
+
+# Optional: HTTP Basic Auth
+file_user = your_username
+file_pass = your_password

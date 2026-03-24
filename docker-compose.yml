@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  cashback-bot:
+    build: .
+    container_name: cashback-bot
+    restart: unless-stopped
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - EXCEL_URL=${EXCEL_URL}
+      - EXCEL_USER=${EXCEL_USER}
+      - EXCEL_PASS=${EXCEL_PASS}
+      - SESSIONS_DIR=/app/sessions
+      - TZ=Europe/Moscow
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./sessions:/app/sessions
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
