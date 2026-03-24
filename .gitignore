@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Telegram session
+*.session
+*.session-journal
+sessions/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Secrets (важно!)
+.env
+.env.local
+.env.prod
+bot.conf
+!bot.conf.example
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.pid
