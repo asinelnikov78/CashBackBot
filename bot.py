@@ -20,9 +20,15 @@ class CashBackBot:
         
         # Инициализируем переменные
         self.token = None
+        self.api_id = None
+        self.api_hash = None
         self.file_url = None
         self.file_user = None
         self.file_pass = None
+        self.categories = []
+        self.cards = []
+        self.row_data = {}
+        self.current_page = 0
         
         # Пытаемся загрузить из bot.conf
         config_loaded = self._load_config_from_file('bot.conf')
@@ -32,11 +38,6 @@ class CashBackBot:
         else:
             print("📁 Файл bot.conf не найден, используем переменные окружения")
             self._load_config_from_env()
-        
-        self.categories = []
-        self.cards = []
-        self.row_data = {}
-        self.current_page = 0
         
         # Директория для сессий
         self.sessions_dir = os.environ.get('SESSIONS_DIR', '/app/sessions')
@@ -70,13 +71,18 @@ class CashBackBot:
         if not self.token:
             raise ValueError("❌ BOT_TOKEN not found (check bot.conf or environment variables)")
         
+        if not self.api_id or not self.api_hash:
+            raise ValueError("❌ API_ID and API_HASH are required! Get them from https://my.telegram.org/apps")
+        
         if not self.file_url:
             print("⚠️ EXCEL_URL not set, bot will work without data")
         
-        # Создаем клиента
+        # Создаем клиента с api_id и api_hash
         print("🔌 Создание клиента Telegram...")
         self.app = Client(
             name=f"{self.sessions_dir}/cashback_bot_session",
+            api_id=self.api_id,
+            api_hash=self.api_hash,
             bot_token=self.token,
             workdir="."
         )
@@ -104,6 +110,12 @@ class CashBackBot:
                         if key == 'token':
                             self.token = value
                             print("   ✅ Токен загружен из файла")
+                        elif key == 'api_id':
+                            self.api_id = int(value)
+                            print("   ✅ API ID загружен из файла")
+                        elif key == 'api_hash':
+                            self.api_hash = value
+                            print("   ✅ API Hash загружен из файла")
                         elif key == 'file_url':
                             self.file_url = value
                             print(f"   ✅ URL файла: {self.file_url}")
@@ -121,12 +133,18 @@ class CashBackBot:
     def _load_config_from_env(self):
         """Загрузка конфигурации из переменных окружения"""
         self.token = os.environ.get('BOT_TOKEN')
+        self.api_id = os.environ.get('API_ID')
+        self.api_hash = os.environ.get('API_HASH')
         self.file_url = os.environ.get('EXCEL_URL')
         self.file_user = os.environ.get('EXCEL_USER')
         self.file_pass = os.environ.get('EXCEL_PASS')
         
         if self.token:
             print("   ✅ Токен загружен из переменных окружения")
+        if self.api_id:
+            print("   ✅ API ID загружен из переменных окружения")
+        if self.api_hash:
+            print("   ✅ API Hash загружен из переменных окружения")
         if self.file_url:
             print(f"   ✅ URL файла: {self.file_url}")
         if self.file_user:
