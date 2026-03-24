@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY bot.py .
 
 # Создание пользователя
-RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
+# RUN useradd -m -u 1000 botuser && chown -R botuser:botuser /app
 
 # Создаем папку для сессий с правильными правами
 RUN mkdir -p /app/sessions && chown -R botuser:botuser /app/sessions && chmod 755 /app/sessions
