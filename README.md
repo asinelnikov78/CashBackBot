@@ -20,7 +20,7 @@ Telegram бот для отображения кэшбэка по категор
 
 ```bash
 # Клонирование репозитория
-git clone https://github.com/YOUR_USERNAME/CashBackBot.git
+git clone https://github.com/asinelnikov78/CashBackBot.git
 cd CashBackBot
 
 # Создание конфига
