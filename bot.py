@@ -7,7 +7,6 @@ import asyncio
 import openpyxl
 import aiohttp
 from io import BytesIO
-from openpyxl.styles import PatternFill
 from pyrogram import Client, filters
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 
@@ -17,7 +16,6 @@ class CashBackBot:
     
     # Целевая зеленая заливка (RGB: 146,208,80 -> HEX: 92D050)
     TARGET_COLOR_RGB = "92D050"
-    TARGET_COLOR_RGB2 = "FF92D050"  # Некоторые версии openpyxl добавляют FF в начале
     
     def __init__(self):
         """Загрузка конфигурации: приоритет bot.conf > переменные окружения"""
@@ -177,10 +175,6 @@ class CashBackBot:
             color = fill.fgColor
             if color.rgb:
                 return color.rgb
-            elif color.theme is not None:
-                return f"theme_{color.theme}"
-            elif color.index is not None:
-                return f"index_{color.index}"
         return None
     
     def _is_green_color(self, color):
@@ -191,33 +185,10 @@ class CashBackBot:
         color_upper = color.upper()
         
         # Проверяем различные форматы
-        green_variants = [
-            "92D050",
-            "FF92D050",
-            "#92D050",
-        ]
-        
-        for variant in green_variants:
-            if variant in color_upper:
-                return True
-        
-        # Проверка по RGB компонентам
-        try:
-            if len(color_upper) == 6:
-                r = int(color_upper[0:2], 16)
-                g = int(color_upper[2:4], 16)
-                b = int(color_upper[4:6], 16)
-                if r == 146 and g == 208 and b == 80:
-                    return True
-            
-            if len(color_upper) == 8:
-                r = int(color_upper[2:4], 16)
-                g = int(color_upper[4:6], 16)
-                b = int(color_upper[6:8], 16)
-                if r == 146 and g == 208 and b == 80:
-                    return True
-        except:
-            pass
+        if "92D050" in color_upper:
+            return True
+        if "FF92D050" in color_upper:
+            return True
         
         return False
     
@@ -254,36 +225,6 @@ class CashBackBot:
                 col_idx += 1
             
             print(f"💳 Найдено карт: {len(self.cards)}")
-            if self.cards:
-                print(f"   Карты: {', '.join(self.cards[:5])}{'...' if len(self.cards) > 5 else ''}")
-            
-            # ДИАГНОСТИКА ЦВЕТОВ
-            print("\n🔍 ДИАГНОСТИКА ЦВЕТОВ:")
-            print("=" * 60)
-            
-            for row_num in range(2, min(loop_count + 2, 12)):
-                category = sheet.cell(row=row_num, column=2).value
-                if not category:
-                    continue
-                
-                print(f"\n📌 Строка {row_num}: {category}")
-                print("-" * 40)
-                
-                for card_idx, card_name in enumerate(self.cards[:5]):
-                    col_idx = 3 + card_idx
-                    cell = sheet.cell(row=row_num, column=col_idx)
-                    value = cell.value
-                    color = self._get_cell_color(cell)
-                    is_green = self._is_green_color(color)
-                    
-                    print(f"   Колонка {col_idx} ({card_name}):")
-                    print(f"      Значение: {value}")
-                    print(f"      Цвет: {color}")
-                    print(f"      Зеленая: {'✅' if is_green else '❌'}")
-            
-            print("\n" + "=" * 60)
-            print("📊 ОСНОВНОЙ ПАРСИНГ")
-            print("=" * 60)
             
             # Основной парсинг
             self.categories = []
@@ -323,28 +264,29 @@ class CashBackBot:
                     if is_green and percent > 0:
                         values[card_name] = percent
                         has_valid = True
-                        print(f"   ✅ ЗЕЛЕНАЯ: {category} | {card_name} | {percent}%")
-                    elif percent > 0:
-                        print(f"   ⚠️ НЕ ЗЕЛЕНАЯ: {category} | {card_name} | {percent}% (цвет: {color})")
                 
                 if has_valid:
                     self.categories.append(category)
                     self.category_emojis_dict[category] = emoji_str
                     self.row_data[category] = values
-                    print(f"   ✅ ДОБАВЛЕНА: {category}")
-                else:
-                    print(f"   ⏭️ ПРОПУЩЕНА: {category}")
             
             workbook.close()
-            self.categories.sort(key=lambda x: x.lower())
             
-            print(f"\n✅ ИТОГО: Загружено {len(self.categories)} категорий")
+            # Сортировка: сначала категории с пробелом в начале, затем по алфавиту
+            def sort_key(cat):
+                # Если категория начинается с пробела, сортируем её в начало
+                if cat.startswith(' '):
+                    return (0, cat.lstrip())  # 0 - приоритет выше
+                else:
+                    return (1, cat)  # 1 - приоритет ниже
+            
+            self.categories.sort(key=sort_key)
+            
+            print(f"✅ Загружено {len(self.categories)} категорий")
             return True
             
         except Exception as e:
             print(f"❌ Ошибка парсинга Excel: {e}")
-            import traceback
-            traceback.print_exc()
             return False
     
     async def _load_data(self):
