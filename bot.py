@@ -30,10 +30,10 @@ class CashBackBot:
         self.file_url = None
         self.file_user = None
         self.file_pass = None
-        self.categories = []              # Список категорий
-        self.category_emojis_dict = {}    # Словарь {категория: эмодзи из Excel}
-        self.cards = []                   # Названия карт
-        self.row_data = {}                # Данные {категория: {карта: процент}}
+        self.categories = []
+        self.category_emojis_dict = {}
+        self.cards = []
+        self.row_data = {}
         self.current_page = 0
         
         # Пытаемся загрузить из bot.conf
@@ -171,34 +171,20 @@ class CashBackBot:
             return None
     
     def _get_cell_color(self, cell):
-        """
-        Получить цвет заливки ячейки.
-        Возвращает строку с цветом в HEX или None
-        """
+        """Получить цвет заливки ячейки"""
         fill = cell.fill
         if fill and fill.fgColor:
             color = fill.fgColor
-            
-            # Проверяем разные форматы цвета
             if color.rgb:
-                # RGB цвет (например, "92D050" или "FF92D050")
                 return color.rgb
             elif color.theme is not None:
-                # Цвет темы
                 return f"theme_{color.theme}"
             elif color.index is not None:
-                # Индекс в палитре
                 return f"index_{color.index}"
-            elif hasattr(color, 'value') and color.value:
-                return str(color.value)
-        
-        # Если цвет не найден, возвращаем None
         return None
     
     def _is_green_color(self, color):
-        """
-        Проверяет, является ли цвет целевым зеленым (RGB: 146,208,80)
-        """
+        """Проверяет, является ли цвет целевым зеленым (RGB: 146,208,80)"""
         if not color:
             return False
         
@@ -206,21 +192,17 @@ class CashBackBot:
         
         # Проверяем различные форматы
         green_variants = [
-            "92D050",      # RGB: 146,208,80
-            "FF92D050",    # С префиксом FF
-            "92D050FF",    # С суффиксом FF
-            "#92D050",     # С решеткой
-            "146,208,80",  # RGB в десятичном формате
+            "92D050",
+            "FF92D050",
+            "#92D050",
         ]
         
-        # Прямое сравнение с вариантами
         for variant in green_variants:
             if variant in color_upper:
                 return True
         
         # Проверка по RGB компонентам
         try:
-            # Если цвет в формате "RRGGBB"
             if len(color_upper) == 6:
                 r = int(color_upper[0:2], 16)
                 g = int(color_upper[2:4], 16)
@@ -228,7 +210,6 @@ class CashBackBot:
                 if r == 146 and g == 208 and b == 80:
                     return True
             
-            # Если цвет в формате "FFRRGGBB"
             if len(color_upper) == 8:
                 r = int(color_upper[2:4], 16)
                 g = int(color_upper[4:6], 16)
@@ -241,12 +222,11 @@ class CashBackBot:
         return False
     
     def _parse_excel(self, file_io):
-        """Парсинг Excel файла (лист 'ИсходныеДанные') с диагностикой цветов"""
+        """Парсинг Excel файла (лист 'ИсходныеДанные')"""
         try:
             print("📖 Парсинг Excel файла...")
             workbook = openpyxl.load_workbook(file_io, data_only=True)
             
-            # Проверяем наличие листа "ИсходныеДанные"
             if "ИсходныеДанные" not in workbook.sheetnames:
                 print(f"⚠️ Лист 'ИсходныеДанные' не найден. Доступные листы: {workbook.sheetnames}")
                 sheet = workbook.worksheets[0]
@@ -264,29 +244,20 @@ class CashBackBot:
             
             print(f"📊 Счетчик строк (B1): {loop_count}")
             
-            # Читаем названия карт из первой строки (начиная с колонки C)
+            # Читаем названия карт
             self.cards = []
-            col_idx = 3  # C = 3
-            max_cols = 100  # Ограничиваем до 100 колонок
-            
-            while col_idx <= max_cols:
+            col_idx = 3
+            while col_idx <= 100:
                 card_name = sheet.cell(row=1, column=col_idx).value
                 if card_name:
                     self.cards.append(str(card_name).strip())
-                    col_idx += 1
-                else:
-                    # Если пустая колонка, проверяем следующую
-                    col_idx += 1
-                    # Если прошли 5 пустых колонок подряд, останавливаемся
-                    # (упрощенная логика)
-                    if col_idx > 10 and len(self.cards) == 0:
-                        break
+                col_idx += 1
             
             print(f"💳 Найдено карт: {len(self.cards)}")
             if self.cards:
                 print(f"   Карты: {', '.join(self.cards[:5])}{'...' if len(self.cards) > 5 else ''}")
             
-            # ДИАГНОСТИКА: выводим цвета первых 10 ячеек
+            # ДИАГНОСТИКА ЦВЕТОВ
             print("\n🔍 ДИАГНОСТИКА ЦВЕТОВ:")
             print("=" * 60)
             
@@ -298,7 +269,7 @@ class CashBackBot:
                 print(f"\n📌 Строка {row_num}: {category}")
                 print("-" * 40)
                 
-                for card_idx, card_name in enumerate(self.cards[:5]):  # Показываем первые 5 карт
+                for card_idx, card_name in enumerate(self.cards[:5]):
                     col_idx = 3 + card_idx
                     cell = sheet.cell(row=row_num, column=col_idx)
                     value = cell.value
@@ -307,22 +278,20 @@ class CashBackBot:
                     
                     print(f"   Колонка {col_idx} ({card_name}):")
                     print(f"      Значение: {value}")
-                    print(f"      Цвет (сырой): {color}")
-                    print(f"      Зеленая заливка: {'✅ ДА' if is_green else '❌ НЕТ'}")
+                    print(f"      Цвет: {color}")
+                    print(f"      Зеленая: {'✅' if is_green else '❌'}")
             
             print("\n" + "=" * 60)
             print("📊 ОСНОВНОЙ ПАРСИНГ")
             print("=" * 60)
             
-            # Читаем категории и данные
+            # Основной парсинг
             self.categories = []
             self.category_emojis_dict = {}
             self.row_data = {}
             
             for row_num in range(2, loop_count + 2):
-                # Колонка A - эмодзи
                 emoji = sheet.cell(row=row_num, column=1).value
-                # Колонка B - категория
                 category = sheet.cell(row=row_num, column=2).value
                 
                 if not category:
@@ -331,7 +300,6 @@ class CashBackBot:
                 category = str(category).strip()
                 emoji_str = str(emoji).strip() if emoji else ''
                 
-                # Проверяем значения по картам
                 has_valid = False
                 values = {}
                 
@@ -339,15 +307,11 @@ class CashBackBot:
                     col_idx = 3 + card_idx
                     cell = sheet.cell(row=row_num, column=col_idx)
                     value = cell.value
-                    
-                    # Получаем цвет заливки
                     color = self._get_cell_color(cell)
                     is_green = self._is_green_color(color)
                     
-                    # Преобразуем значение в число
                     if value is not None:
                         try:
-                            # Убираем знак % если есть
                             if isinstance(value, str):
                                 value = value.replace('%', '').strip()
                             percent = float(value)
@@ -356,28 +320,25 @@ class CashBackBot:
                     else:
                         percent = 0
                     
-                    # Сохраняем значение, только если заливка зеленая И процент > 0
                     if is_green and percent > 0:
                         values[card_name] = percent
                         has_valid = True
-                        print(f"   ✅ ЗЕЛЕНАЯ ячейка: {category} | {card_name} | {percent}%")
+                        print(f"   ✅ ЗЕЛЕНАЯ: {category} | {card_name} | {percent}%")
                     elif percent > 0:
-                        print(f"   ⚠️ ПРОЦЕНТ ЕСТЬ, НО НЕ ЗЕЛЕНЫЙ: {category} | {card_name} | {percent}% (цвет: {color})")
-            
-```python
-                # Категория показывается, только если есть хотя бы один валидный процент
+                        print(f"   ⚠️ НЕ ЗЕЛЕНАЯ: {category} | {card_name} | {percent}% (цвет: {color})")
+                
                 if has_valid:
                     self.categories.append(category)
                     self.category_emojis_dict[category] = emoji_str
                     self.row_data[category] = values
-                    print(f"   ✅ ДОБАВЛЕНА категория: {category} (эмодзи: {emoji_str or 'нет'})")
+                    print(f"   ✅ ДОБАВЛЕНА: {category}")
                 else:
-                    print(f"   ⏭️ ПРОПУЩЕНА категория (нет зеленых процентов): {category}")
+                    print(f"   ⏭️ ПРОПУЩЕНА: {category}")
             
             workbook.close()
             self.categories.sort(key=lambda x: x.lower())
             
-            print(f"\n✅ ИТОГО: Загружено {len(self.categories)} категорий из {loop_count} строк")
+            print(f"\n✅ ИТОГО: Загружено {len(self.categories)} категорий")
             return True
             
         except Exception as e:
@@ -407,22 +368,15 @@ class CashBackBot:
         for cat in page_categories:
             emoji = self.category_emojis_dict.get(cat, '')
             button_text = f"{emoji} {cat}" if emoji else cat
-            buttons.append([
-                InlineKeyboardButton(
-                    button_text, 
-                    callback_data=f"cat_{cat}"
-                )
-            ])
+            buttons.append([InlineKeyboardButton(button_text, callback_data=f"cat_{cat}")])
         
         nav_buttons = []
         total_pages = (len(self.categories) + items_per_page - 1) // items_per_page
         
         if page > 0:
             nav_buttons.append(InlineKeyboardButton("◀️ Назад", callback_data=f"page_{page-1}"))
-        
         if page < total_pages - 1:
             nav_buttons.append(InlineKeyboardButton("Вперед ▶️", callback_data=f"page_{page+1}"))
-        
         if nav_buttons:
             buttons.append(nav_buttons)
         
@@ -431,12 +385,11 @@ class CashBackBot:
         return InlineKeyboardMarkup(buttons)
     
     def get_category_info(self, category_name):
-        """Получить отсортированную информацию по категории (только с зеленой заливкой)"""
+        """Получить отсортированную информацию по категории"""
         if category_name not in self.row_data:
             return None
         
         values = self.row_data[category_name]
-        # Фильтруем только ненулевые значения (они уже отфильтрованы по зеленой заливке)
         non_zero = [(card, value) for card, value in values.items() if value > 0]
         non_zero.sort(key=lambda x: x[1], reverse=True)
         
@@ -470,12 +423,10 @@ class CashBackBot:
         
         @self.app.on_message(filters.command("start"))
         async def start_command(client, message: Message):
-            """Загрузка/обновление списка категорий"""
             print(f"📩 Получена команда /start от {message.from_user.id}")
             
             status_msg = await message.reply("🔄 Загрузка данных...")
             
-            # Загружаем данные
             success = await self._load_data()
             
             if not success:
@@ -502,7 +453,6 @@ class CashBackBot:
                 category_name = data[4:]
                 print(f"🔍 Выбрана категория: {category_name}")
                 
-                # Получаем информацию по категории
                 info = self.get_category_info(category_name)
                 
                 if not info:
