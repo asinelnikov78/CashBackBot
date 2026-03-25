@@ -17,6 +17,7 @@ class CashBackBot:
     
     # Целевая зеленая заливка (RGB: 146,208,80 -> HEX: 92D050)
     TARGET_COLOR_RGB = "92D050"
+    TARGET_COLOR_RGB2 = "FF92D050"  # Некоторые версии openpyxl добавляют FF в начале
     
     def __init__(self):
         """Загрузка конфигурации: приоритет bot.conf > переменные окружения"""
@@ -31,7 +32,7 @@ class CashBackBot:
         self.file_pass = None
         self.categories = []              # Список категорий
         self.category_emojis_dict = {}    # Словарь {категория: эмодзи из Excel}
-        self.cards = []                   # Названия карт (из первой строки)
+        self.cards = []                   # Названия карт
         self.row_data = {}                # Данные {категория: {карта: процент}}
         self.current_page = 0
         
@@ -170,23 +171,77 @@ class CashBackBot:
             return None
     
     def _get_cell_color(self, cell):
-        """Получить цвет заливки ячейки в формате HEX"""
+        """
+        Получить цвет заливки ячейки.
+        Возвращает строку с цветом в HEX или None
+        """
         fill = cell.fill
         if fill and fill.fgColor:
             color = fill.fgColor
+            
             # Проверяем разные форматы цвета
             if color.rgb:
+                # RGB цвет (например, "92D050" или "FF92D050")
                 return color.rgb
             elif color.theme is not None:
-                # Цвет темы — пока не обрабатываем
-                return None
+                # Цвет темы
+                return f"theme_{color.theme}"
             elif color.index is not None:
-                # Индекс в палитре — пока не обрабатываем
-                return None
+                # Индекс в палитре
+                return f"index_{color.index}"
+            elif hasattr(color, 'value') and color.value:
+                return str(color.value)
+        
+        # Если цвет не найден, возвращаем None
         return None
     
+    def _is_green_color(self, color):
+        """
+        Проверяет, является ли цвет целевым зеленым (RGB: 146,208,80)
+        """
+        if not color:
+            return False
+        
+        color_upper = color.upper()
+        
+        # Проверяем различные форматы
+        green_variants = [
+            "92D050",      # RGB: 146,208,80
+            "FF92D050",    # С префиксом FF
+            "92D050FF",    # С суффиксом FF
+            "#92D050",     # С решеткой
+            "146,208,80",  # RGB в десятичном формате
+        ]
+        
+        # Прямое сравнение с вариантами
+        for variant in green_variants:
+            if variant in color_upper:
+                return True
+        
+        # Проверка по RGB компонентам
+        try:
+            # Если цвет в формате "RRGGBB"
+            if len(color_upper) == 6:
+                r = int(color_upper[0:2], 16)
+                g = int(color_upper[2:4], 16)
+                b = int(color_upper[4:6], 16)
+                if r == 146 and g == 208 and b == 80:
+                    return True
+            
+            # Если цвет в формате "FFRRGGBB"
+            if len(color_upper) == 8:
+                r = int(color_upper[2:4], 16)
+                g = int(color_upper[4:6], 16)
+                b = int(color_upper[6:8], 16)
+                if r == 146 and g == 208 and b == 80:
+                    return True
+        except:
+            pass
+        
+        return False
+    
     def _parse_excel(self, file_io):
-        """Парсинг Excel файла (лист 'ИсходныеДанные')"""
+        """Парсинг Excel файла (лист 'ИсходныеДанные') с диагностикой цветов"""
         try:
             print("📖 Парсинг Excel файла...")
             workbook = openpyxl.load_workbook(file_io, data_only=True)
@@ -212,20 +267,52 @@ class CashBackBot:
             # Читаем названия карт из первой строки (начиная с колонки C)
             self.cards = []
             col_idx = 3  # C = 3
-            while True:
+            max_cols = 100  # Ограничиваем до 100 колонок
+            
+            while col_idx <= max_cols:
                 card_name = sheet.cell(row=1, column=col_idx).value
                 if card_name:
-                    self.cards.append(str(card_name))
+                    self.cards.append(str(card_name).strip())
                     col_idx += 1
                 else:
-                    # Проверяем, что дальше нет данных (хотя бы на 3 колонки вперед)
-                    if col_idx > 10:  # После колонки K (11) считаем, что карты закончились
-                        break
+                    # Если пустая колонка, проверяем следующую
                     col_idx += 1
+                    # Если прошли 5 пустых колонок подряд, останавливаемся
+                    # (упрощенная логика)
+                    if col_idx > 10 and len(self.cards) == 0:
+                        break
             
             print(f"💳 Найдено карт: {len(self.cards)}")
             if self.cards:
                 print(f"   Карты: {', '.join(self.cards[:5])}{'...' if len(self.cards) > 5 else ''}")
+            
+            # ДИАГНОСТИКА: выводим цвета первых 10 ячеек
+            print("\n🔍 ДИАГНОСТИКА ЦВЕТОВ:")
+            print("=" * 60)
+            
+            for row_num in range(2, min(loop_count + 2, 12)):
+                category = sheet.cell(row=row_num, column=2).value
+                if not category:
+                    continue
+                
+                print(f"\n📌 Строка {row_num}: {category}")
+                print("-" * 40)
+                
+                for card_idx, card_name in enumerate(self.cards[:5]):  # Показываем первые 5 карт
+                    col_idx = 3 + card_idx
+                    cell = sheet.cell(row=row_num, column=col_idx)
+                    value = cell.value
+                    color = self._get_cell_color(cell)
+                    is_green = self._is_green_color(color)
+                    
+                    print(f"   Колонка {col_idx} ({card_name}):")
+                    print(f"      Значение: {value}")
+                    print(f"      Цвет (сырой): {color}")
+                    print(f"      Зеленая заливка: {'✅ ДА' if is_green else '❌ НЕТ'}")
+            
+            print("\n" + "=" * 60)
+            print("📊 ОСНОВНОЙ ПАРСИНГ")
+            print("=" * 60)
             
             # Читаем категории и данные
             self.categories = []
@@ -241,25 +328,28 @@ class CashBackBot:
                 if not category:
                     continue
                 
-                category = str(category)
-                emoji_str = str(emoji) if emoji else ''
+                category = str(category).strip()
+                emoji_str = str(emoji).strip() if emoji else ''
                 
-                # Проверяем значения по картам (начиная с колонки C)
+                # Проверяем значения по картам
                 has_valid = False
                 values = {}
                 
                 for card_idx, card_name in enumerate(self.cards):
-                    col_idx = 3 + card_idx  # C = 3
+                    col_idx = 3 + card_idx
                     cell = sheet.cell(row=row_num, column=col_idx)
                     value = cell.value
                     
-                    # Проверяем цвет заливки
+                    # Получаем цвет заливки
                     color = self._get_cell_color(cell)
-                    is_green = (color == self.TARGET_COLOR_RGB)
+                    is_green = self._is_green_color(color)
                     
                     # Преобразуем значение в число
                     if value is not None:
                         try:
+                            # Убираем знак % если есть
+                            if isinstance(value, str):
+                                value = value.replace('%', '').strip()
                             percent = float(value)
                         except (ValueError, TypeError):
                             percent = 0
@@ -270,27 +360,24 @@ class CashBackBot:
                     if is_green and percent > 0:
                         values[card_name] = percent
                         has_valid = True
-                    else:
-                        # Все равно сохраняем для внутренней логики, но не показываем
-                        values[card_name] = 0
-                
+                        print(f"   ✅ ЗЕЛЕНАЯ ячейка: {category} | {card_name} | {percent}%")
+                    elif percent > 0:
+                        print(f"   ⚠️ ПРОЦЕНТ ЕСТЬ, НО НЕ ЗЕЛЕНЫЙ: {category} | {card_name} | {percent}% (цвет: {color})")
+            
+```python
                 # Категория показывается, только если есть хотя бы один валидный процент
                 if has_valid:
                     self.categories.append(category)
                     self.category_emojis_dict[category] = emoji_str
                     self.row_data[category] = values
-                    print(f"   ✅ Добавлена категория: {category} (эмодзи: {emoji_str or 'нет'})")
-                    # Выводим найденные проценты
-                    valid_vals = {k: v for k, v in values.items() if v > 0}
-                    if valid_vals:
-                        print(f"      Проценты: {valid_vals}")
+                    print(f"   ✅ ДОБАВЛЕНА категория: {category} (эмодзи: {emoji_str or 'нет'})")
                 else:
-                    print(f"   ⏭️ Пропущена категория (нет зеленых процентов): {category}")
+                    print(f"   ⏭️ ПРОПУЩЕНА категория (нет зеленых процентов): {category}")
             
             workbook.close()
             self.categories.sort(key=lambda x: x.lower())
             
-            print(f"✅ Загружено {len(self.categories)} категорий")
+            print(f"\n✅ ИТОГО: Загружено {len(self.categories)} категорий из {loop_count} строк")
             return True
             
         except Exception as e:
