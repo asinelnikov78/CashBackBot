@@ -25,9 +25,10 @@ class CashBackBot:
         self.file_url = None
         self.file_user = None
         self.file_pass = None
-        self.categories = []
-        self.cards = []
-        self.row_data = {}
+        self.categories = []              # Список категорий
+        self.category_emojis_dict = {}    # Словарь {категория: эмодзи}
+        self.cards = []                   # Названия карт
+        self.row_data = {}                # Данные по категориям {категория: {карта: значение}}
         self.current_page = 0
         
         # Пытаемся загрузить из bot.conf
@@ -43,8 +44,8 @@ class CashBackBot:
         self.sessions_dir = os.environ.get('SESSIONS_DIR', '/app/sessions')
         os.makedirs(self.sessions_dir, exist_ok=True)
         
-        # Словарь эмодзи для категорий
-        self.category_emojis = {
+        # Словарь эмодзи по умолчанию (на случай, если в Excel нет эмодзи)
+        self.default_emojis = {
             'продукты': '🥑',
             'продукты питания': '🥑',
             'еда': '🍕',
@@ -195,6 +196,20 @@ class CashBackBot:
                 return True
         return False
     
+    def _get_emoji_for_category(self, category, excel_emoji=None):
+        """Получить эмодзи для категории (сначала из Excel, потом из словаря по умолчанию)"""
+        # Если в Excel есть эмодзи, используем его
+        if excel_emoji and excel_emoji.strip():
+            return excel_emoji.strip()
+        
+        # Иначе ищем в словаре по умолчанию
+        category_lower = category.lower()
+        for key, emoji in self.default_emojis.items():
+            if key in category_lower:
+                return emoji
+        
+        return '📌'  # Эмодзи по умолчанию
+    
     def _parse_excel(self, file_io):
         """Парсинг Excel файла из BytesIO (лист 'ИсходныеДанные')"""
         try:
@@ -210,9 +225,19 @@ class CashBackBot:
                 sheet = workbook["ИсходныеДанные"]
                 print(f"📋 Используется лист: ИсходныеДанные")
             
-            # Читаем первую строку (столбцы 2-100) - названия карт
+            # Читаем ячейку B1 - количество строк (счетчик цикла)
+            loop_count = sheet['B1'].value
+            if loop_count is None:
+                loop_count = 0
+            else:
+                loop_count = int(loop_count)
+            
+            print(f"📊 Счетчик строк (B1): {loop_count}")
+            
+            # Читаем первую строку (столбцы C и далее) - названия карт
+            # Карты начинаются с колонки C (индекс 3)
             self.cards = []
-            for col in range(2, 101):
+            for col in range(3, 103):  # C = 3, до 102 (100 карт)
                 card_name = sheet.cell(row=1, column=col).value
                 if card_name:
                     self.cards.append(str(card_name))
@@ -221,29 +246,26 @@ class CashBackBot:
             
             print(f"💳 Найдено карт: {len([c for c in self.cards if c])}")
             
-            # Читаем ячейку A1 - количество строк
-            loop_count = sheet['A1'].value
-            if loop_count is None:
-                loop_count = 0
-            else:
-                loop_count = int(loop_count)
-            
-            print(f"📊 Количество строк: {loop_count}")
-            
-            # Читаем категории и данные
+            # Читаем категории и данные (строки со 2 по loop_count+1)
             self.categories = []
+            self.category_emojis_dict = {}
             self.row_data = {}
             
             for row_num in range(2, loop_count + 2):
-                category = sheet.cell(row=row_num, column=1).value
+                # Колонка A - эмодзи
+                emoji = sheet.cell(row=row_num, column=1).value
+                # Колонка B - категория
+                category = sheet.cell(row=row_num, column=2).value
+                
                 if not category:
                     continue
                 
                 category = str(category)
+                emoji_str = str(emoji) if emoji else ''
                 
-                # Читаем значения для этой категории по всем картам
+                # Читаем значения для этой категории по всем картам (начиная с колонки C)
                 values = {}
-                for col_idx, card_name in enumerate(self.cards, start=2):
+                for col_idx, card_name in enumerate(self.cards, start=3):
                     if card_name:
                         value = sheet.cell(row=row_num, column=col_idx).value
                         if value is not None:
@@ -257,8 +279,9 @@ class CashBackBot:
                 # Проверяем, есть ли ненулевые значения
                 if self._has_non_zero_values(values):
                     self.categories.append(category)
+                    self.category_emojis_dict[category] = emoji_str
                     self.row_data[category] = values
-                    print(f"   ✅ Добавлена категория: {category}")
+                    print(f"   ✅ Добавлена категория: {category} (эмодзи: {emoji_str or 'авто'})")
                 else:
                     print(f"   ⏭️ Пропущена категория (нет ненулевых): {category}")
             
@@ -282,15 +305,12 @@ class CashBackBot:
     
     def _get_category_emoji(self, category_name):
         """Получить эмодзи для категории"""
-        if not category_name:
-            return '📌'
+        # Сначала проверяем, есть ли эмодзи из Excel
+        if category_name in self.category_emojis_dict and self.category_emojis_dict[category_name]:
+            return self.category_emojis_dict[category_name]
         
-        category_lower = category_name.lower()
-        for key, emoji in self.category_emojis.items():
-            if key in category_lower:
-                return emoji
-        
-        return '📌'
+        # Иначе используем словарь по умолчанию
+        return self._get_emoji_for_category(category_name, None)
     
     def get_categories_keyboard(self, page=0, items_per_page=10):
         """Создание клавиатуры с категориями"""
@@ -371,13 +391,6 @@ class CashBackBot:
             """Загрузка/обновление списка категорий"""
             print(f"📩 Получена команда /start от {message.from_user.id}")
             
-            # Удаляем сообщение с командой /start
-            try:
-                await message.delete()
-                print("   🗑️ Сообщение /start удалено")
-            except Exception as e:
-                print(f"   ⚠️ Не удалось удалить сообщение: {e}")
-            
             status_msg = await message.reply("🔄 Загрузка данных...")
             
             # Загружаем данные
@@ -393,8 +406,6 @@ class CashBackBot:
             
             keyboard = self.get_categories_keyboard(page=0)
             await status_msg.delete()
-            
-            # Отправляем новое сообщение с кнопками
             await message.reply(
                 "💰 **Добро пожаловать в CashBackBot!**\n\n📋 **Выберите категорию:**",
                 reply_markup=keyboard
@@ -423,15 +434,12 @@ class CashBackBot:
                 for card, value in info:
                     response += f"• **{card}**: {value}%\n"
                 
-                # Добавляем кнопку "Назад к категориям"
-                keyboard = InlineKeyboardMarkup([[
-                    InlineKeyboardButton("◀️ Назад к категориям", callback_data="back_to_categories")
-                ]])
-                
                 await callback_query.answer()
                 await callback_query.message.edit(
                     response,
-                    reply_markup=keyboard
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("◀️ Назад к категориям", callback_data="back_to_categories")
+                    ]])
                 )
                 print(f"✅ Отправлена информация по категории: {category_name}")
             
