@@ -274,11 +274,12 @@ class CashBackBot:
             
             # Сортировка: сначала категории с пробелом в начале, затем по алфавиту
             def sort_key(cat):
-                # Если категория начинается с пробела, сортируем её в начало
-                if cat.startswith(' '):
-                    return (0, cat.lstrip())  # 0 - приоритет выше
+                cat_stripped = cat.strip().lower()
+                # Категория "Все покупки" всегда на первом месте
+                if cat_stripped == "все покупки":
+                    return (0, "")
                 else:
-                    return (1, cat)  # 1 - приоритет ниже
+                    return (1, cat_stripped)# 1 - приоритет ниже
             
             self.categories.sort(key=sort_key)
             
