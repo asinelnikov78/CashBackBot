@@ -32,6 +32,7 @@ class CashBackBot:
         self.category_emojis_dict = {}
         self.cards = []
         self.row_data = {}
+        self.comments_data = {}  # Словарь для примечаний к процентам
         self.current_page = 0
         
         # Пытаемся загрузить из bot.conf
@@ -192,8 +193,14 @@ class CashBackBot:
         
         return False
     
+    def _get_cell_comment(self, cell):
+        """Получить текст примечания из ячейки"""
+        if cell.comment:
+            return cell.comment.text.strip()
+        return None
+    
     def _parse_excel(self, file_io):
-        """Парсинг Excel файла (лист 'ИсходныеДанные')"""
+        """Парсинг Excel файла (лист 'ИсходныеДанные') с чтением примечаний"""
         try:
             print("📖 Парсинг Excel файла...")
             workbook = openpyxl.load_workbook(file_io, data_only=True)
@@ -230,6 +237,7 @@ class CashBackBot:
             self.categories = []
             self.category_emojis_dict = {}
             self.row_data = {}
+            self.comments_data = {}
             
             for row_num in range(2, loop_count + 2):
                 emoji = sheet.cell(row=row_num, column=1).value
@@ -243,6 +251,7 @@ class CashBackBot:
                 
                 has_valid = False
                 values = {}
+                comments = {}
                 
                 for card_idx, card_name in enumerate(self.cards):
                     col_idx = 3 + card_idx
@@ -250,6 +259,9 @@ class CashBackBot:
                     value = cell.value
                     color = self._get_cell_color(cell)
                     is_green = self._is_green_color(color)
+                    
+                    # Читаем примечание к ячейке с процентом
+                    comment = self._get_cell_comment(cell)
                     
                     if value is not None:
                         try:
@@ -263,23 +275,24 @@ class CashBackBot:
                     
                     if is_green and percent > 0:
                         values[card_name] = percent
+                        if comment:
+                            comments[card_name] = comment
                         has_valid = True
                 
                 if has_valid:
                     self.categories.append(category)
                     self.category_emojis_dict[category] = emoji_str
                     self.row_data[category] = values
+                    self.comments_data[category] = comments
             
             workbook.close()
             
-            # Сортировка: сначала категории с пробелом в начале, затем по алфавиту
+            # Сортировка: "Все покупки" на первом месте, остальные по алфавиту
             def sort_key(cat):
                 cat_stripped = cat.strip().lower()
-                # Категория "Все покупки" всегда на первом месте
                 if cat_stripped == "все покупки":
                     return (0, "")
-                else:
-                    return (1, cat_stripped)# 1 - приоритет ниже
+                return (1, cat_stripped)
             
             self.categories.sort(key=sort_key)
             
@@ -328,15 +341,23 @@ class CashBackBot:
         return InlineKeyboardMarkup(buttons)
     
     def get_category_info(self, category_name):
-        """Получить отсортированную информацию по категории"""
+        """Получить отсортированную информацию по категории с примечаниями"""
         if category_name not in self.row_data:
             return None
         
         values = self.row_data[category_name]
-        non_zero = [(card, value) for card, value in values.items() if value > 0]
-        non_zero.sort(key=lambda x: x[1], reverse=True)
+        comments = self.comments_data.get(category_name, {})
         
-        return non_zero
+        # Собираем данные с примечаниями
+        items = []
+        for card, value in values.items():
+            comment = comments.get(card, '')
+            items.append((card, value, comment))
+        
+        # Сортируем по убыванию процента
+        items.sort(key=lambda x: x[1], reverse=True)
+        
+        return items
     
     async def start(self):
         """Запуск бота"""
@@ -396,9 +417,9 @@ class CashBackBot:
                 category_name = data[4:]
                 print(f"🔍 Выбрана категория: {category_name}")
                 
-                info = self.get_category_info(category_name)
+                items = self.get_category_info(category_name)
                 
-                if not info:
+                if not items:
                     await callback_query.answer("Нет данных по категории", show_alert=True)
                     return
                 
@@ -406,8 +427,11 @@ class CashBackBot:
                 response = f"{emoji} **{category_name}**\n\n" if emoji else f"**{category_name}**\n\n"
                 response += "**💰 Кэшбэк по картам:**\n\n"
                 
-                for card, value in info:
-                    response += f"• **{card}**: {value}%\n"
+                for card, value, comment in items:
+                    line = f"• **{card}**: {value}%"
+                    if comment:
+                        line += f" ({comment})"
+                    response += line + "\n"
                 
                 await callback_query.answer()
                 await callback_query.message.edit(
